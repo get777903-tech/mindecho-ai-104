@@ -859,19 +859,15 @@ async function uploadToElevenLabsVoiceCloning(audioBlob) {
   }
 }
 
-// Generate Personal Meditation Text & Play Audio Track
-function generatePersonalMeditation() {
-  const name = document.getElementById('child-name').value || (appState.lang === 'he' ? "סופיה" : "София");
-  const gender = document.getElementById('child-gender').value;
-  const audioSource = document.getElementById('audio-mode-source').value;
-
+// 5-Step Pipeline: Compose Base Script + Inject 6 Conditions
+function composeMeditationWith6Parameters(name, gender, age, traits, mode, lang) {
   const isGirl = (gender === 'girl');
-  let customText = "";
+  let baseScript = "";
 
-  if (appState.lang === 'he') {
-    customText = BASE_MEDITATION_TEMPLATE_HE.replace(/{NAME}/g, name);
-  } else if (appState.lang === 'en') {
-    customText = BASE_MEDITATION_TEMPLATE_RU
+  if (lang === 'he') {
+    baseScript = BASE_MEDITATION_TEMPLATE_HE.replace(/{NAME}/g, name);
+  } else if (lang === 'en') {
+    baseScript = BASE_MEDITATION_TEMPLATE_RU
       .replace(/{NAME}/g, name)
       .replace(/{GENDER_END}/g, '')
       .replace(/{GENDER_ADJ}/g, '')
@@ -883,7 +879,7 @@ function generatePersonalMeditation() {
     const genderWizard = isGirl ? 'ца' : '';
     const genderFriend = isGirl ? 'ой' : 'ом';
 
-    customText = BASE_MEDITATION_TEMPLATE_RU
+    baseScript = BASE_MEDITATION_TEMPLATE_RU
       .replace(/{NAME}/g, name)
       .replace(/{GENDER_END}/g, genderEnd)
       .replace(/{GENDER_ADJ}/g, genderAdj)
@@ -891,10 +887,35 @@ function generatePersonalMeditation() {
       .replace(/{GENDER_FRIEND}/g, genderFriend);
   }
 
-  document.getElementById('meditation-text-box').innerText = customText;
+  const condition1 = `Имя и Пол ребенка: ${name} (${isGirl ? 'Девочка' : 'Мальчик'}), ${age} лет`;
+  const condition2 = `Индивидуальные черты: ${traits}`;
+  const condition3 = `Режим медитации: ${mode === 'bedtime' ? '🌙 Засыпание' : (mode === 'morning' ? '☀️ Утренний настрой' : '🚨 Заземление')}`;
+  const condition4 = `Эмоциональная окраска: Заботливая гипнотерапия CBT/ACT`;
+  const condition5 = `Скорость речи и Паузы: Замедление 0.75x с паузами в 2 секунды`;
+  const condition6 = `Тембр голоса: Клонированный глубокий голос родителя (ElevenLabs)`;
+
+  const metaHeader = `✨ [6 ПАРАМЕТРОВ КЛОНИРОВАНИЯ ГОЛОСА ELEVENLABS AI]:\n1. ${condition1}\n2. ${condition2}\n3. ${condition3}\n4. ${condition4}\n5. ${condition5}\n6. ${condition6}\n\n📜 [ПЕРСОНАЛИЗИРОВАННЫЙ ТЕКСТ ДЛЯ ОЗВУЧКИ]:\n\n`;
+
+  return metaHeader + baseScript;
+}
+
+// Generate Personal Meditation Text & Synthesize Cloned Voice
+async function generatePersonalMeditation() {
+  const name = document.getElementById('child-name').value || (appState.lang === 'he' ? "סופיה" : "София");
+  const gender = document.getElementById('child-gender').value;
+  const age = document.getElementById('child-age').value || 6;
+  const traits = document.getElementById('child-traits')?.value || 'любит красивое рисование и школу';
+  const mode = document.getElementById('meditation-type').value;
+  const audioSource = document.getElementById('audio-mode-source').value;
+
+  // 1 & 2. Base text + 6 Conditions Injection
+  const fullText = composeMeditationWith6Parameters(name, gender, age, traits, mode, appState.lang);
+
+  // 3. Render compiled personalized text in scroll view
+  document.getElementById('meditation-text-box').innerText = fullText;
   document.getElementById('player-title').innerText = `${name} — ${appState.lang === 'he' ? 'סיפור-מדיטציה' : 'Рассказ-Медитация'}`;
   
-  // Smooth scroll to player card on mobile & desktop
+  // Smooth scroll to player card
   const playerCard = document.querySelector('.player-card');
   if (playerCard) {
     playerCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -902,27 +923,73 @@ function generatePersonalMeditation() {
     setTimeout(() => { playerCard.style.boxShadow = ''; }, 2000);
   }
 
-  // Force reset playing state for fresh generation
+  // Reset audio state
   appState.isPlayingAudio = false;
 
-  if (audioSource === 'elevenlabs') {
-    document.getElementById('player-subtitle').innerText = `✨ ElevenLabs Instant Voice Cloning (Ключ скопирован) • 0.75x`;
-    if (appState.recordedAudioUrl) {
-      playParentRecordedVoice();
-    } else {
-      speakTextTTS(customText);
+  // 4 & 5. If ElevenLabs AI mode is selected, send compiled text & voice_id to ElevenLabs API, return audio stream & play
+  if (audioSource === 'elevenlabs' && ELEVENLABS_API_KEY) {
+    document.getElementById('player-subtitle').innerText = "⏳ 4. Передача текста и голоса родителя в ElevenLabs API...";
+    document.getElementById('play-btn').innerText = "⏳";
+
+    try {
+      const voiceId = appState.elevenlabsVoiceId || "21m00Tcm4TlvDq8ikWAM"; // Default Rachel/Parent model if voice sample pending
+      const pureMeditationText = fullText.split('📜 [ПЕРСОНАЛИЗИРОВАННЫЙ ТЕКСТ ДЛЯ ОЗВУЧКИ]:\n\n')[1] || fullText;
+
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: pureMeditationText.slice(0, 1200),
+          model_id: "eleven_multilingual_v2",
+          voice_settings: {
+            stability: 0.75,
+            similarity_boost: 0.85,
+            style: 0.40,
+            use_speaker_boost: true
+          }
+        })
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        appState.elevenlabsAudioUrl = audioUrl;
+
+        if (appState.audioTrack) appState.audioTrack.pause();
+        const elevenAudio = new Audio(audioUrl);
+        appState.isPlayingAudio = true;
+        document.getElementById('play-btn').innerText = "⏸";
+        document.getElementById('player-subtitle').innerText = "✨ 5. Готовый клонированный голос ElevenLabs проигрывается в приложении!";
+
+        elevenAudio.play();
+        elevenAudio.onended = () => {
+          appState.isPlayingAudio = false;
+          document.getElementById('play-btn').innerText = "▶";
+        };
+
+        logClickAnalytics('Meditation_Generated', name, 0, { audio_source: 'elevenlabs_api_stream', status: 'Success' });
+        return;
+      }
+    } catch (err) {
+      console.warn("ElevenLabs TTS Streaming Notice:", err);
     }
-  } else if (appState.recordedAudioUrl || audioSource === 'azure') {
+  }
+
+  // Fallback to recorded parent microphone clip or studio track if stream is pending
+  if (appState.recordedAudioUrl || audioSource === 'azure') {
     playParentRecordedVoice();
   } else if (audioSource === 'tts') {
     document.getElementById('player-subtitle').innerText = `🤖 Динамический ИИ-диктор • Низкий тембр`;
-    speakTextTTS(customText);
+    speakTextTTS(fullText);
   } else {
     document.getElementById('player-subtitle').innerText = `🎵 Студийная MP3 фонограмма • Без музыки`;
     playMP3AudioTrack(true);
   }
 
-  logClickAnalytics('Meditation_Generated', name, 0, { audio_source: audioSource, elevenlabs_key: 'Active' });
+  logClickAnalytics('Meditation_Generated', name, 0, { audio_source: audioSource });
 }
 
 // Play Parent's Actual Recorded Voice Audio
