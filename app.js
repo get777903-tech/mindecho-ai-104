@@ -7,7 +7,7 @@
 const GOOGLE_SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx_DEMO_MINDECHO_WEBHOOK/exec";
 
 // ElevenLabs API Key Configured
-const ELEVENLABS_API_KEY = "sk_3cb441424b12b568e07a6d8d30aff9a03b3827bca0ca3e3d";
+const ELEVENLABS_API_KEY = "sk_8ff7dc4721ee3ab193ef06f789ff8ab2e2ad0a287d336de1";
 
 // Audio Track File Name
 const MEDITATION_AUDIO_SRC = "meditation1.mp3";
